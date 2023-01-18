@@ -1,5 +1,5 @@
 import io
-from typing import Tuple, Union
+from typing import Tuple, Union, Iterator, Generator
 
 
 class Parser:
@@ -38,6 +38,8 @@ class Parser:
 
         """
         self.filename = filename
+        self.store = True
+        self._sequences = None
 
     def get_record(
         self, f_obj: io.TextIOWrapper
@@ -103,8 +105,20 @@ class Parser:
         #
         # the interpretation of the following code is that for the lifetime of the filebuffer
         # returned by the `open` function it will be accessible as the variable `f_obj`
+        nseq = 0
         with open(self.filename, "r") as f_obj:
+            with open(self.filename, "r") as f_obj:
+                rec = self.get_record(
+                    f_obj
+                )  # will be a generator that yields tuples of strings
 
+                for seq in rec:
+                    yield seq
+                    nseq += 1
+                self.store = False
+
+                if nseq == 0:
+                    raise ValueError(f"File ({self.filename}) had 0 lines.")
             # this loop will break at some point!
             # but I will leave it up to you to implement the fix!
 
@@ -115,13 +129,13 @@ class Parser:
             # Alternatively, you can reformulate this to return elements
             # by just consuming an iterator.
 
-            while True:
-                rec = self.get_record(f_obj)
-                yield rec
+        #    while True:
+        #        rec = self.get_record(f_obj)
+        #        yield rec
 
     def _get_record(
         self, f_obj: io.TextIOWrapper
-    ) -> Union[Tuple[str, str], Tuple[str, str, str]]:
+    ) -> Iterator[Union[Tuple[str, str], Tuple[str, str, str]]]:
         """
         a method to be overridden by inherited classes.
         """
@@ -137,11 +151,22 @@ class FastaParser(Parser):
     Fasta Specific Parsing
     """
 
-    def _get_record(self, f_obj: io.TextIOWrapper) -> Tuple[str, str]:
+    def _get_record(self, f_obj: io.TextIOWrapper) -> Iterator[Tuple[str, str]]:
         """
         returns the next fasta record
         """
-        pass
+
+        seq_name = None
+
+        for idx, line in enumerate(f_obj):
+            line = line.strip()
+            if line == "":
+                raise ValueError(f"Got an empty line for {f_obj.name} @ line {idx+1}")
+            if line.startswith(">"):
+                seq_name = line[1:]
+                continue
+
+            yield (seq_name, line)
 
 
 class FastqParser(Parser):
@@ -149,8 +174,33 @@ class FastqParser(Parser):
     Fastq Specific Parsing
     """
 
-    def _get_record(self, f_obj: io.TextIOWrapper) -> Tuple[str, str, str]:
+    def _get_record(
+        self, f_obj: io.TextIOWrapper
+    ) -> Generator[Tuple[str, str, str], None, None]:
         """
         returns the next fastq record
         """
-        pass
+        read_qual = True
+        seq_name = None
+        seq = None
+
+        for idx, line in enumerate(f_obj):
+            line = line.strip()
+            if line == "":
+                raise ValueError(f"Got an empty line for {f_obj.name} @ line {idx+1}")
+            if line == "+":
+                continue  # skip this line
+
+            if line.startswith("@"):  # if its a header line, we'll store it
+                seq_name = line[1:]
+                continue
+
+            if (
+                read_qual is True
+            ):  # if read_qual is True, then we'll assume the line is a sequence
+                seq = line
+                read_qual = False
+            else:
+                # we assume that quality will always be after the seq, so if we get here and read_qual is False then we can just return the tuple
+                yield (seq_name, seq, line)  # line here is the quality string
+                read_qual = True
