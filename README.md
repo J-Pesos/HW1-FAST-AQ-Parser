@@ -26,7 +26,7 @@ The learning goals of this project are:
 	- [X] Edit the `pyproject.toml` file to reflect author information
 	- [X] Update the dependencies to include those that you use in your code
 
-- [ ] Write a unit test (in the test.py file) for
+- [X] Write a unit test (in the test.py file) for
 	- [X] Fasta Parser
 	- [X] Fastq Parser
 	- [X] Transcription
